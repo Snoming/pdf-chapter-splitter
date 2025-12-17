@@ -1,35 +1,36 @@
-# PDF章节拆分器 - Go后端
+# PDF章节拆分器 - Python后端
 
-基于Gin框架的高性能PDF章节拆分工具后端API服务。
+基于FastAPI的统一后端服务，提供文件管理、智能章节识别、文本分析和PDF拆分功能。
 
 ## 技术栈
 
-- **Go 1.21** - 现代化的编程语言
-- **Gin** - 高性能的HTTP Web框架
-- **Logrus** - 结构化日志库
-- **UUID** - 唯一标识符生成
+- **Python 3.11** - 现代化的编程语言
+- **FastAPI** - 高性能的异步Web框架
+- **PyMuPDF** - 强大的PDF处理库
+- **Loguru** - 结构化日志库
+- **Pydantic** - 数据验证和序列化
 - **CORS** - 跨域资源共享支持
 
 ## 项目结构
 
 ```
 backend/
-├── main.go                    # 应用入口点
-├── go.mod                     # Go模块定义
-├── go.sum                     # 依赖校验和
+├── main.py                    # 应用入口点
+├── requirements.txt           # Python依赖
 ├── Dockerfile                 # Docker构建文件
 ├── README.md                  # 项目文档
-└── internal/                  # 内部包
-    ├── api/                   # API路由和处理器
-    │   ├── router.go         # 路由配置
-    │   └── handlers.go       # HTTP处理器
-    ├── config/                # 配置管理
-    │   └── config.go         # 配置结构和加载
+└── src/                       # 源代码
+    ├── api/                   # API路由
+    │   └── routes.py          # 路由配置和端点定义
+    ├── core/                  # 核心配置
+    │   └── config.py          # 配置结构和加载
     ├── models/                # 数据模型
-    │   └── models.go         # 数据结构定义
-    └── service/               # 业务逻辑服务
-        ├── file_service.go   # 文件处理服务
-        └── pdf_service.go    # PDF处理服务
+    │   └── schemas.py         # Pydantic模型定义
+    └── services/              # 业务逻辑服务
+        ├── file_service.py    # 文件处理服务
+        ├── pdf_analyzer.py    # PDF章节分析服务
+        ├── pdf_splitter.py    # PDF拆分服务
+        └── task_service.py    # 任务管理服务
 ```
 
 ## 功能特性
@@ -41,13 +42,15 @@ backend/
 - `POST /api/split` - PDF拆分处理
 - `GET /api/download/:file_id` - 文件下载
 - `GET /api/task/:task_id` - 任务状态查询
-- `GET /api/health` - 健康检查
+- `POST /api/validate-chapters` - 章节验证
+- `GET /api/pdf-info/:file_id` - PDF信息获取
+- `GET /health` - 健康检查
 
 ### 核心功能
 
 - 📁 **文件上传管理** - 支持大文件上传，文件格式验证
-- 🔍 **章节分析** - 集成AI服务进行智能章节识别
-- ✂️ **PDF拆分** - 调用Rust引擎进行高效PDF拆分
+- 🔍 **智能章节识别** - 基于PyMuPDF的章节自动识别
+- ✂️ **PDF拆分** - 高效的PDF拆分处理
 - 📊 **任务管理** - 异步任务处理和进度跟踪
 - 💾 **文件存储** - 安全的文件存储和访问控制
 - 🔒 **错误处理** - 完善的错误处理和日志记录
@@ -56,19 +59,19 @@ backend/
 
 ### 前置要求
 
-- Go 1.21+
+- Python 3.11+
 - Git
 
 ### 安装依赖
 
 ```bash
-go mod download
+pip install -r requirements.txt
 ```
 
 ### 启动开发服务器
 
 ```bash
-go run main.go
+python main.py
 ```
 
 服务将在 http://localhost:8080 启动
@@ -76,8 +79,8 @@ go run main.go
 ### 构建生产版本
 
 ```bash
-go build -o pdf-splitter-backend
-./pdf-splitter-backend
+# 使用uvicorn直接运行
+uvicorn main:app --host 0.0.0.0 --port 8080 --workers 4
 ```
 
 ## 环境变量配置
@@ -89,7 +92,7 @@ go build -o pdf-splitter-backend
 | `UPLOAD_DIR` | `./uploads` | 上传文件目录 |
 | `TEMP_DIR` | `./temp` | 临时文件目录 |
 | `MAX_FILE_SIZE` | `52428800` | 最大文件大小（50MB） |
-| `AI_SERVICE_URL` | `http://localhost:8000` | AI服务地址 |
+| `DEBUG` | `True` | 调试模式开关 |
 
 ### 环境配置示例
 
@@ -106,6 +109,7 @@ export ENVIRONMENT=production
 export UPLOAD_DIR=/app/uploads
 export TEMP_DIR=/app/temp
 export MAX_FILE_SIZE=52428800
+export DEBUG=False
 ```
 
 ## Docker部署
@@ -224,13 +228,13 @@ GET /api/task/{task_id}
 ### 运行测试
 
 ```bash
-go test ./...
+pytest
 ```
 
-### 运行基准测试
+### 运行特定测试
 
 ```bash
-go test -bench=. ./...
+pytest tests/test_file_service.py -v
 ```
 
 ## 日志
@@ -239,20 +243,21 @@ go test -bench=. ./...
 
 - `DEBUG` - 详细调试信息
 - `INFO` - 一般信息
-- `WARN` - 警告信息
+- `WARNING` - 警告信息
 - `ERROR` - 错误信息
+- `CRITICAL` - 严重错误信息
 
 日志格式：
 ```
-time="2023-01-01T00:00:00Z" level=info msg="服务器启动在端口 8080"
+2023-01-01 00:00:00.000 | INFO     | main:lifespan:28 - PDF章节拆分器后端服务启动中...
 ```
 
 ## 性能优化
 
-- 使用Gin框架提供高性能HTTP处理
-- 异步任务处理避免阻塞请求
-- 文件流式处理减少内存占用
-- 合理的错误处理和资源清理
+- 使用FastAPI的异步特性提高并发处理能力
+- 文件流处理减少内存占用
+- 合理的任务队列管理
+- 高效的PDF处理算法
 
 ## 安全考虑
 
@@ -260,3 +265,4 @@ time="2023-01-01T00:00:00Z" level=info msg="服务器启动在端口 8080"
 - 路径遍历攻击防护
 - CORS配置限制跨域访问
 - 结构化错误响应避免信息泄露
+- 安全的文件存储路径
