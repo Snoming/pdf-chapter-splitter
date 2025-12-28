@@ -1,28 +1,41 @@
-# PDF章节拆分器
+# PDF分析与知识图谱可视化系统
 
-简化的在线PDF文档章节拆分工具，专注于50MB以内的文档处理，采用现代化微服务架构。
+一个现代化的PDF分析平台，专注于PDF内容的深度分析、自然语言交互和知识图谱构建，帮助用户更高效地理解和利用PDF文档中的知识。
 
 ## 项目概述
 
-PDF章节拆分器是一个基于Web的应用程序，允许用户上传PDF文件，自动或手动识别章节结构，并将其拆分为独立的章节文件。系统采用前后端分离架构，提供直观的用户界面和强大的处理能力。
+本系统由最初的PDF章节拆分器转型而来，现专注于PDF内容的智能分析、对话式交互和知识图谱可视化。系统支持"书-章-节-知识点"四层知识架构体系，能够自动提取PDF内容中的关键信息，构建可视化知识图谱，并支持用户通过自然语言提问获取准确回答。
 
 ## 技术架构
 
 ### 前端 (Next.js)
 - **框架**: Next.js 14 + TypeScript
-- **UI库**: Ant Design + Tailwind CSS
-- **功能**: 文件上传、PDF预览、章节编辑、下载管理
+- **UI库**: Tailwind CSS
+- **状态管理**: Zustand
+- **可视化库**: D3.js
+- **功能**: 文件上传、PDF预览、对话交互、知识图谱可视化
 
-### 后端 (Go)
-- **框架**: Gin + Go 1.21
-- **功能**: API服务、文件管理、任务调度
-
-### AI服务 (Python)
+### 后端 (Python)
 - **框架**: FastAPI + PyMuPDF
-- **功能**: 智能章节识别、文本分析
+- **图数据库**: Neo4j（用于知识图谱存储和查询）
+- **大模型集成**: 支持千问等大模型API
+- **功能**: 统一的API服务，包括文件管理、智能内容分析、知识图谱构建、大模型服务集成
 
-### PDF处理引擎 (Rust)
-- **功能**: 高性能PDF拆分、文件处理
+## 核心功能
+
+### 🚀 核心功能
+- 📁 **文件上传**: 支持拖拽上传，最大50MB PDF文件
+- 👀 **PDF预览**: 浏览器内预览，支持页面导航和缩放
+- 💬 **智能对话**: 基于PDF内容的自然语言问答，支持上下文理解
+- 🧠 **知识图谱**: 自动构建交互式知识图谱，可视化展示知识点关联
+- 🔍 **内容分析**: 深度提取PDF中的关键信息和实体关系
+
+### 🎯 技术特色
+- **简洁架构**: 前后端分离，后端统一服务，易于维护和扩展
+- **响应式设计**: 支持桌面和移动设备
+- **实时反馈**: 操作后立即给予用户反馈
+- **安全可靠**: 文件验证、大小限制、路径安全
+- **可扩展设计**: 支持多种大模型集成，易于功能扩展
 
 ## 快速开始
 
@@ -31,7 +44,7 @@ PDF章节拆分器是一个基于Web的应用程序，允许用户上传PDF文�
 ```bash
 # 克隆项目
 git clone <repository-url>
-cd pdf-chapter-splitter
+cd pdf-analyzer
 
 # 启动所有服务
 docker-compose up -d
@@ -39,7 +52,6 @@ docker-compose up -d
 # 访问应用
 # 前端: http://localhost:3000
 # 后端API: http://localhost:8080
-# AI服务: http://localhost:8000
 ```
 
 ### 本地开发
@@ -54,102 +66,76 @@ npm run dev
 #### 后端开发
 ```bash
 cd backend
-go mod download
-go run main.go
-```
-
-#### AI服务开发
-```bash
-cd ai-service
 pip install -r requirements.txt
 python main.py
 ```
 
-## 功能特性
-
-### 🚀 核心功能
-- 📁 **文件上传**: 支持拖拽上传，最大50MB PDF文件
-- 👀 **PDF预览**: 浏览器内预览，支持页面导航和缩放
-- 🤖 **智能识别**: AI驱动的章节自动识别
-- ✏️ **手动编辑**: 灵活的章节边界调整
-- ✂️ **高效拆分**: Rust引擎提供高性能PDF处理
-- 💾 **批量下载**: 支持单个或批量下载章节文件
-
-### 🎯 技术特色
-- **微服务架构**: 服务解耦，易于扩展和维护
-- **响应式设计**: 支持桌面和移动设备
-- **实时进度**: WebSocket实时更新处理状态
-- **错误恢复**: 完善的错误处理和重试机制
-- **安全可靠**: 文件验证、大小限制、路径安全
-
 ## 项目结构
 
 ```
-pdf-chapter-splitter/
+pdf-analyzer/
 ├── frontend/                  # Next.js前端应用
 │   ├── src/
 │   │   ├── app/              # App Router页面
 │   │   ├── components/       # React组件
 │   │   ├── lib/              # 工具函数
-│   │   └── hooks/            # 自定义Hooks
+│   │   └── store/            # 状态管理
 │   ├── package.json
 │   └── Dockerfile
-├── backend/                   # Go后端API
-│   ├── internal/
-│   │   ├── api/              # HTTP处理器
-│   │   ├── config/           # 配置管理
-│   │   ├── models/           # 数据模型
-│   │   └── service/          # 业务逻辑
-│   ├── main.go
-│   └── Dockerfile
-├── ai-service/                # Python AI服务
+├── backend/                   # Python后端服务
 │   ├── src/
 │   │   ├── api/              # FastAPI路由
 │   │   ├── core/             # 核心配置
 │   │   ├── models/           # 数据模型
-│   │   └── services/         # AI服务
+│   │   └── services/         # 业务服务
 │   ├── main.py
-│   └── Dockerfile
-├── pdf-processor/             # Rust PDF处理引擎
-│   ├── src/
-│   ├── Cargo.toml
+│   ├── requirements.txt
 │   └── Dockerfile
 ├── .kiro/                     # 项目规格文档
-│   └── specs/
-│       └── pdf-chapter-splitter/
 ├── docker-compose.yml         # Docker编排配置
-└── README.md
+└── README.md                  # 项目说明文档
 ```
 
 ## API文档
 
 ### 后端API (Port 8080)
-- `POST /api/upload` - 文件上传
-- `POST /api/analyze` - 章节分析
-- `POST /api/split` - PDF拆分
-- `GET /api/download/:id` - 文件下载
-- `GET /api/task/:id` - 任务状态
-
-### AI服务API (Port 8000)
-- `POST /api/analyze` - 智能章节识别
-- `POST /api/upload-and-analyze` - 上传并分析
-- `POST /api/validate-chapters` - 章节验证
-- `GET /api/pdf-info` - PDF信息获取
+- **文件管理**
+  - `POST /api/upload` - 文件上传
+  - `GET /api/pdf-info/:id` - PDF信息获取
+  
+- **内容分析**
+  - `POST /api/analyze` - PDF内容分析
+  
+- **知识图谱**
+  - `POST /api/knowledge-graph` - 构建知识图谱
+  - `GET /api/knowledge-graph/:file_id` - 获取知识图谱
+  - `GET /api/knowledge-graph/:file_id/nodes` - 获取知识图谱节点
+  - `GET /api/knowledge-graph/:file_id/edges` - 获取知识图谱边
+  - `GET /api/knowledge-graph/:file_id/visualize` - 获取知识图谱可视化数据
+  - `POST /api/knowledge-points` - 管理知识点
+  - `GET /api/knowledge-graph/:file_id/search` - 搜索知识点
 
 ## 开发指南
 
 ### 环境要求
-- Node.js 18+
-- Go 1.21+
-- Python 3.11+
-- Rust 1.70+
-- Docker & Docker Compose
+- **前端**: Node.js 18+
+- **后端**: Python 3.11+
+- **容器化**: Docker & Docker Compose
+
+### 大模型配置
+1. 在 `.env` 文件中配置大模型API密钥和参数
+2. 支持的模型: 千问模型
+3. 配置示例:
+   ```
+   LLM_API_KEY=your_api_key
+   LLM_API_ENDPOINT=https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions
+   LLM_MODEL_NAME=qwen-turbo
+   LLM_TEMPERATURE=0.7
+   ```
 
 ### 代码规范
 - **前端**: ESLint + Prettier
-- **后端**: gofmt + golint
-- **AI服务**: Black + isort + flake8
-- **Rust**: rustfmt + clippy
+- **后端**: Black + isort + flake8
 
 ### 测试
 ```bash
@@ -157,13 +143,10 @@ pdf-chapter-splitter/
 cd frontend && npm test
 
 # 后端测试
-cd backend && go test ./...
+cd backend && pytest
 
-# AI服务测试
-cd ai-service && pytest
-
-# Rust测试
-cd pdf-processor && cargo test
+# 集成测试
+cd backend && python test_integration.py
 ```
 
 ## 部署
@@ -181,7 +164,26 @@ docker-compose logs -f
 ```
 
 ### 环境变量配置
-参考各服务目录下的README文件了解详细的环境变量配置。
+
+#### 后端环境变量
+| 变量名 | 说明 | 默认值 |
+|-------|------|--------|
+| `LLM_API_KEY` | 大模型API密钥 | 空 |
+| `LLM_API_ENDPOINT` | 大模型API端点 | https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions |
+| `LLM_MODEL_NAME` | 大模型名称 | qwen-turbo |
+| `LLM_TEMPERATURE` | 生成温度 | 0.7 |
+| `LLM_MAX_TOKENS` | 最大生成 tokens | 2048 |
+| `LLM_RETRY_COUNT` | API调用重试次数 | 3 |
+| `LLM_TIMEOUT` | API调用超时时间（秒） | 30 |
+| `NEO4J_URI` | Neo4j连接地址 | bolt://localhost:7687 |
+| `NEO4J_USER` | Neo4j用户名 | neo4j |
+| `NEO4J_PASSWORD` | Neo4j密码 | password |
+| `NEO4J_DATABASE` | Neo4j数据库名 | neo4j |
+
+#### 前端环境变量
+| 变量名 | 说明 | 默认值 |
+|-------|------|--------|
+| `NEXT_PUBLIC_API_URL` | 后端API地址 | http://localhost:8080 |
 
 ## 监控和日志
 
@@ -211,4 +213,4 @@ docker-compose logs -f
 
 ---
 
-**PDF章节拆分器** - 让PDF处理变得简单高效 🚀
+**PDF分析与知识图谱可视化系统** - 让PDF知识探索变得简单高效 🚀

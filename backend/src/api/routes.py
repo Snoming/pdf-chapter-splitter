@@ -11,17 +11,19 @@ from loguru import logger
 from ..models.schemas import (
     UploadResponse, 
     AnalyzeRequest, 
-    AnalyzeResponse, 
-    SplitRequest, 
-    SplitResponse,
-    TaskStatusResponse,
-    ErrorResponse,
+    AnalyzeResponse,
     ValidationResult,
-    ChapterInfo
+    ChapterInfo,
+    KnowledgeGraphRequest,
+    KnowledgeGraphResponse,
+    KnowledgePointRequest,
+    KnowledgePointResponse,
+    GraphNodeResponse,
+    GraphEdgeResponse
 )
 from ..services.file_service import FileService
 from ..services.pdf_analyzer import PDFAnalyzer
-from ..services.task_service import TaskService
+from ..services.knowledge_graph_service import KnowledgeGraphService
 from ..core.config import settings
 
 
@@ -30,7 +32,7 @@ router = APIRouter()
 # 服务实例
 file_service = FileService()
 pdf_analyzer = PDFAnalyzer()
-task_service = TaskService()
+knowledge_graph_service = KnowledgeGraphService()
 
 
 @router.post("/upload", response_model=UploadResponse)
@@ -93,7 +95,7 @@ async def analyze_chapters(request: AnalyzeRequest):
             )
         
         # 执行章节分析
-        chapters, pdf_metadata = pdf_analyzer.analyze_pdf(file_path, request.file_id)
+        chapters, pdf_metadata = await pdf_analyzer.analyze_pdf(file_path, request.file_id)
         
         # 更新文件状态
         await file_service.update_file_status(request.file_id, "analyzed")
@@ -124,187 +126,16 @@ async def analyze_chapters(request: AnalyzeRequest):
         )
 
 
-@router.post("/split", response_model=SplitResponse)
-async def split_pdf(request: SplitRequest):
-    """
-    拆分PDF文件
-    
-    Args:
-        request: 拆分请求
-        
-    Returns:
-        拆分任务信息
-    """
-    try:
-        logger.info(f"接收PDF拆分请求: {request.file_id}")
-        
-        # 验证文件存在
-        file_path = await file_service.get_file_path(request.file_id)
-        if not file_path:
-            raise HTTPException(
-                status_code=404,
-                detail="文件不存在"
-            )
-        
-        # 验证章节信息
-        if not request.chapters:
-            raise HTTPException(
-                status_code=400,
-                detail="章节列表不能为空"
-            )
-        
-        # 创建拆分任务
-        task = await task_service.create_split_task(request.file_id, request.chapters)
-        
-        response = SplitResponse(
-            task_id=task.task_id,
-            status=task.status,
-            message="拆分任务已创建，正在处理中"
-        )
-        
-        logger.info(f"拆分任务创建成功: {task.task_id}")
-        return response
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"创建拆分任务失败: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"创建拆分任务失败: {str(e)}"
-        )
 
 
-@router.get("/task/{task_id}", response_model=TaskStatusResponse)
-async def get_task_status(task_id: str):
-    """
-    获取任务状态
-    
-    Args:
-        task_id: 任务ID
-        
-    Returns:
-        任务状态信息
-    """
-    try:
-        task = await task_service.get_task_status(task_id)
-        
-        if not task:
-            raise HTTPException(
-                status_code=404,
-                detail="任务不存在"
-            )
-        
-        response = TaskStatusResponse(
-            task_id=task.task_id,
-            file_id=task.file_id,
-            status=task.status,
-            progress=task.progress,
-            error_message=task.error_message,
-            created_at=task.created_at,
-            completed_at=task.completed_at,
-            download_links=task.download_links
-        )
-        
-        return response
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"获取任务状态失败: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"获取任务状态失败: {str(e)}"
-        )
 
 
-@router.get("/download/{file_id}")
-async def download_file(file_id: str, chapter: str = None, download: bool = False):
-    """
-    下载或预览文件
-    
-    Args:
-        file_id: 文件ID
-        chapter: 章节文件名（可选）
-        download: 是否强制下载（默认False，即预览模式）
-        
-    Returns:
-        文件下载或预览响应
-    """
-    try:
-        import urllib.parse
-        # 对章节名进行URL解码
-        decoded_chapter = urllib.parse.unquote(chapter) if chapter else None
-        
-        # 获取文件路径
-        file_path = await file_service.get_download_path(file_id, decoded_chapter)
-        
-        if not file_path or not os.path.exists(file_path):
-            raise HTTPException(
-                status_code=404,
-                detail="文件不存在"
-            )
-        
-        # 确定文件名
-        if chapter:
-            filename = chapter
-        else:
-            file_info = await file_service.get_file_info(file_id)
-            filename = file_info.filename if file_info else "download.pdf"
-        
-        logger.info(f"文件访问: {file_id} - {filename} (download={download})")
-        
-        # 根据download参数决定是预览还是下载
-        response = FileResponse(
-            path=file_path,
-            media_type="application/pdf"
-        )
-        
-        # 只有当download为True时，才设置filename参数（强制下载）
-        if download:
-            response.headers["Content-Disposition"] = f"attachment; filename={filename}"
-        else:
-            # 预览模式，使用inline
-            response.headers["Content-Disposition"] = f"inline; filename={filename}"
-        
-        return response
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"文件下载失败: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"文件下载失败: {str(e)}"
-        )
 
 
-@router.get("/files/{file_id}/chapters")
-async def list_chapter_files(file_id: str):
-    """
-    列出章节文件
-    
-    Args:
-        file_id: 文件ID
-        
-    Returns:
-        章节文件列表
-    """
-    try:
-        files = await file_service.list_chapter_files(file_id)
-        
-        return {
-            "file_id": file_id,
-            "chapter_files": files,
-            "count": len(files)
-        }
-        
-    except Exception as e:
-        logger.error(f"列出章节文件失败: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"列出章节文件失败: {str(e)}"
-        )
+
+
+
+
 
 
 @router.post("/validate-chapters")
@@ -412,84 +243,292 @@ async def delete_file(file_id: str):
         )
 
 
-@router.get("/queue/status")
-async def get_queue_status():
+
+
+
+
+
+
+# ------------------------
+# 知识图谱相关API
+# ------------------------
+
+
+@router.post("/knowledge-graph", response_model=KnowledgeGraphResponse)
+async def build_knowledge_graph(request: KnowledgeGraphRequest):
     """
-    获取任务队列状态
+    构建知识图谱
     
+    Args:
+        request: 知识图谱构建请求
+        
     Returns:
-        队列状态信息
+        知识图谱构建响应
     """
     try:
-        status = await task_service.get_queue_status()
-        return status
+        logger.info(f"接收知识图谱构建请求: {request.file_id}")
         
+        # 获取文件路径
+        file_path = await file_service.get_file_path(request.file_id)
+        if not file_path:
+            raise HTTPException(
+                status_code=404,
+                detail="文件不存在"
+            )
+        
+        # 分析PDF文件，提取章节、节和知识点
+        chapters, pdf_metadata = await pdf_analyzer.analyze_pdf(file_path, request.file_id, use_llm=request.use_llm)
+        
+        # 构建知识图谱，跳过数据库保存
+        knowledge_graph = await knowledge_graph_service.build_knowledge_graph(chapters, use_llm=request.use_llm, save_to_db=False)
+        
+        response = KnowledgeGraphResponse(
+            success=True,
+            graph=knowledge_graph,
+            message=f"知识图谱构建成功，节点数: {len(knowledge_graph.nodes)}, 边数: {len(knowledge_graph.edges)}"
+        )
+        
+        logger.info(f"知识图谱构建完成: {request.file_id}")
+        return response
+        
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"获取队列状态失败: {str(e)}")
+        logger.error(f"构建知识图谱失败: {str(e)}")
         raise HTTPException(
             status_code=500,
-            detail=f"获取队列状态失败: {str(e)}"
+            detail=f"构建知识图谱失败: {str(e)}"
         )
 
 
-@router.get("/queue/active")
-async def get_active_tasks():
+@router.get("/knowledge-graph/{file_id}", response_model=KnowledgeGraphResponse)
+async def get_knowledge_graph(file_id: str):
     """
-    获取活跃任务列表
+    获取知识图谱
     
+    Args:
+        file_id: 文件唯一标识
+        
     Returns:
-        活跃任务列表
+        知识图谱响应
     """
     try:
-        tasks = await task_service.get_active_tasks()
+        logger.info(f"接收知识图谱获取请求: {file_id}")
         
-        return {
-            "active_tasks": [
-                {
-                    "task_id": task.task_id,
-                    "file_id": task.file_id,
-                    "status": task.status,
-                    "progress": task.progress,
-                    "created_at": task.created_at,
-                    "chapters_count": len(task.chapters)
-                }
-                for task in tasks
-            ],
-            "count": len(tasks)
-        }
+        # 这里可以从数据库或缓存中获取知识图谱
+        # 目前先返回空响应，后续可以扩展
         
+        response = KnowledgeGraphResponse(
+            success=True,
+            graph=None,
+            message="知识图谱获取成功"
+        )
+        
+        return response
+        
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"获取活跃任务失败: {str(e)}")
+        logger.error(f"获取知识图谱失败: {str(e)}")
         raise HTTPException(
             status_code=500,
-            detail=f"获取活跃任务失败: {str(e)}"
+            detail=f"获取知识图谱失败: {str(e)}"
         )
 
 
-@router.post("/cleanup")
-async def cleanup_files():
+@router.get("/knowledge-graph/{file_id}/nodes", response_model=GraphNodeResponse)
+async def get_graph_nodes(file_id: str, node_type: str = None):
     """
-    清理临时文件和过期任务
+    获取知识图谱节点
     
+    Args:
+        file_id: 文件唯一标识
+        node_type: 节点类型过滤
+        
     Returns:
-        清理结果
+        节点列表响应
     """
     try:
-        # 清理临时文件
-        temp_files_cleaned = await file_service.cleanup_temp_files()
+        logger.info(f"接收知识图谱节点获取请求: {file_id}")
         
-        # 清理过期任务
-        tasks_cleaned = await task_service.cleanup_completed_tasks()
+        # 这里可以从数据库或缓存中获取知识图谱节点
+        # 目前先返回空响应，后续可以扩展
         
-        return {
-            "message": "清理完成",
-            "temp_files_cleaned": temp_files_cleaned,
-            "tasks_cleaned": tasks_cleaned
-        }
+        response = GraphNodeResponse(
+            nodes=[],
+            total=0
+        )
         
+        return response
+        
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"清理失败: {str(e)}")
+        logger.error(f"获取知识图谱节点失败: {str(e)}")
         raise HTTPException(
             status_code=500,
-            detail=f"清理失败: {str(e)}"
+            detail=f"获取知识图谱节点失败: {str(e)}"
+        )
+
+
+@router.get("/knowledge-graph/{file_id}/edges", response_model=GraphEdgeResponse)
+async def get_graph_edges(file_id: str, relation_type: str = None):
+    """
+    获取知识图谱边
+    
+    Args:
+        file_id: 文件唯一标识
+        relation_type: 关系类型过滤
+        
+    Returns:
+        边列表响应
+    """
+    try:
+        logger.info(f"接收知识图谱边获取请求: {file_id}")
+        
+        # 这里可以从数据库或缓存中获取知识图谱边
+        # 目前先返回空响应，后续可以扩展
+        
+        response = GraphEdgeResponse(
+            edges=[],
+            total=0
+        )
+        
+        return response
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"获取知识图谱边失败: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"获取知识图谱边失败: {str(e)}"
+        )
+
+
+@router.get("/knowledge-graph/{file_id}/visualize")
+async def visualize_knowledge_graph(file_id: str):
+    """
+    获取知识图谱可视化数据
+    
+    Args:
+        file_id: 文件唯一标识
+        
+    Returns:
+        可视化数据
+    """
+    try:
+        logger.info(f"接收知识图谱可视化请求: {file_id}")
+        
+        # 获取文件路径
+        file_path = await file_service.get_file_path(file_id)
+        if not file_path:
+            raise HTTPException(
+                status_code=404,
+                detail="文件不存在"
+            )
+        
+        # 分析PDF文件，提取章节、节和知识点
+        chapters, pdf_metadata = await pdf_analyzer.analyze_pdf(file_path, file_id)
+        
+        # 构建知识图谱，跳过数据库保存
+        knowledge_graph = await knowledge_graph_service.build_knowledge_graph(chapters, save_to_db=False)
+        
+        # 生成可视化数据
+        visualize_data = knowledge_graph_service.visualize_graph(knowledge_graph)
+        
+        logger.info(f"知识图谱可视化数据生成完成: {file_id}")
+        return visualize_data
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"生成知识图谱可视化数据失败: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"生成知识图谱可视化数据失败: {str(e)}"
+        )
+
+
+@router.post("/knowledge-points", response_model=KnowledgePointResponse)
+async def manage_knowledge_points(request: KnowledgePointRequest):
+    """
+    管理知识点
+    
+    Args:
+        request: 知识点管理请求
+        
+    Returns:
+        知识点管理响应
+    """
+    try:
+        logger.info(f"接收知识点管理请求: {request.file_id}")
+        
+        # 这里可以实现知识点的管理逻辑
+        # 目前先返回空响应，后续可以扩展
+        
+        response = KnowledgePointResponse(
+            success=True,
+            message="知识点管理成功",
+            knowledge_points=request.knowledge_points
+        )
+        
+        return response
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"管理知识点失败: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"管理知识点失败: {str(e)}"
+        )
+
+
+@router.get("/knowledge-graph/{file_id}/search")
+async def search_knowledge_points(file_id: str, keyword: str):
+    """
+    搜索知识点
+    
+    Args:
+        file_id: 文件唯一标识
+        keyword: 搜索关键词
+        
+    Returns:
+        搜索结果
+    """
+    try:
+        logger.info(f"接收知识点搜索请求: {file_id}, 关键词: {keyword}")
+        
+        # 获取文件路径
+        file_path = await file_service.get_file_path(file_id)
+        if not file_path:
+            raise HTTPException(
+                status_code=404,
+                detail="文件不存在"
+            )
+        
+        # 分析PDF文件，提取章节、节和知识点
+        chapters, pdf_metadata = await pdf_analyzer.analyze_pdf(file_path, file_id)
+        
+        # 构建知识图谱
+        knowledge_graph = await knowledge_graph_service.build_knowledge_graph(chapters)
+        
+        # 搜索知识点
+        matched_points = knowledge_graph_service.search_knowledge_points(knowledge_graph, keyword)
+        
+        logger.info(f"知识点搜索完成: {file_id}, 匹配数: {len(matched_points)}")
+        return {
+            "keyword": keyword,
+            "matched_points": matched_points,
+            "count": len(matched_points)
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"搜索知识点失败: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"搜索知识点失败: {str(e)}"
         )

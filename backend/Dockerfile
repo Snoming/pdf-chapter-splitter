@@ -1,26 +1,22 @@
 # 构建阶段
-FROM golang:1.21-alpine AS builder
+FROM python:3.11-alpine AS builder
 
 # 设置工作目录
 WORKDIR /app
 
-# 安装必要的包
-RUN apk add --no-cache git
+# 安装系统依赖
+RUN apk add --no-cache gcc musl-dev libffi-dev openssl-dev
 
-# 复制go mod文件
-COPY go.mod go.sum ./
+# 复制requirements文件
+COPY requirements.txt ./
 
-# 下载依赖
-RUN go mod download
-
-# 复制源代码
-COPY . .
-
-# 构建应用
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o main .
+# 创建虚拟环境并安装依赖
+RUN python -m venv /opt/venv && \
+    /opt/venv/bin/pip install --upgrade pip && \
+    /opt/venv/bin/pip install -r requirements.txt
 
 # 运行阶段
-FROM alpine:latest
+FROM python:3.11-alpine
 
 # 安装ca-certificates用于HTTPS请求
 RUN apk --no-cache add ca-certificates
@@ -31,11 +27,14 @@ RUN adduser -D -s /bin/sh appuser
 # 设置工作目录
 WORKDIR /app
 
-# 从构建阶段复制二进制文件
-COPY --from=builder /app/main .
+# 从构建阶段复制虚拟环境
+COPY --from=builder /opt/venv /opt/venv
+
+# 复制源代码
+COPY . .
 
 # 创建必要的目录
-RUN mkdir -p uploads temp && chown -R appuser:appuser /app
+RUN mkdir -p uploads temp logs && chown -R appuser:appuser /app
 
 # 切换到非root用户
 USER appuser
@@ -50,5 +49,5 @@ ENV UPLOAD_DIR=/app/uploads
 ENV TEMP_DIR=/app/temp
 ENV MAX_FILE_SIZE=52428800
 
-# 启动应用
-CMD ["./main"]
+# 激活虚拟环境并启动应用
+CMD ["/opt/venv/bin/python", "main.py"]

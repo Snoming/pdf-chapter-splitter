@@ -6,11 +6,13 @@ PDF章节分析服务
 import re
 import fitz  # PyMuPDF
 import os
-from typing import List, Tuple, Optional
+import uuid
+from typing import List, Tuple, Optional, Dict, Any
 from loguru import logger
 
-from ..models.schemas import ChapterInfo, PDFMetadata, ValidationResult
+from ..models.schemas import ChapterInfo, PDFMetadata, ValidationResult, SectionInfo, KnowledgePoint
 from ..core.config import settings
+from .llm_service import llm_service
 
 
 class PDFAnalyzer:
@@ -22,13 +24,14 @@ class PDFAnalyzer:
             for pattern in settings.CHAPTER_PATTERNS
         ]
     
-    def analyze_pdf(self, file_path: str, file_id: str) -> Tuple[List[ChapterInfo], PDFMetadata]:
+    async def analyze_pdf(self, file_path: str, file_id: str, use_llm: bool = True) -> Tuple[List[ChapterInfo], PDFMetadata]:
         """
         分析PDF文件，提取章节信息
         
         Args:
             file_path: PDF文件路径
             file_id: 文件唯一标识
+            use_llm: 是否使用大模型增强分析
             
         Returns:
             章节列表和PDF元数据的元组
@@ -54,6 +57,10 @@ class PDFAnalyzer:
             # 验证和修正章节信息
             chapters = self._validate_chapters(chapters, pdf_metadata.total_pages)
             
+            # 如果启用大模型分析，提取节和知识点
+            if use_llm and chapters:
+                chapters = await self._enhance_with_llm(doc, chapters)
+            
             # 更新PDF元数据
             pdf_metadata.chapters = chapters
             pdf_metadata.status = "analyzed"
@@ -66,6 +73,117 @@ class PDFAnalyzer:
         except Exception as e:
             logger.error(f"PDF分析失败: {str(e)}")
             raise
+    
+    async def _enhance_with_llm(self, doc: fitz.Document, chapters: List[ChapterInfo]) -> List[ChapterInfo]:
+        """
+        使用大模型增强章节分析，提取节和知识点
+        
+        Args:
+            doc: PDF文档对象
+            chapters: 章节列表
+            
+        Returns:
+            增强后的章节列表
+        """
+        try:
+            logger.info(f"开始使用大模型增强分析，章节数量: {len(chapters)}")
+            
+            enhanced_chapters = []
+            
+            for chapter in chapters:
+                # 提取章节文本
+                chapter_text = self._extract_text_from_pages(doc, chapter.start_page, chapter.end_page)
+                
+                # 使用大模型分析章节内容
+                analysis_result = await llm_service.analyze_pdf_content(chapter_text, context=chapter.title)
+                
+                # 生成章节ID
+                chapter_id = str(uuid.uuid4())
+                
+                # 构建增强后的章节
+                enhanced_chapter = ChapterInfo(
+                    id=chapter_id,
+                    title=chapter.title,
+                    start_page=chapter.start_page,
+                    end_page=chapter.end_page,
+                    page_count=chapter.page_count,
+                    sections=[]
+                )
+                
+                # 确保analysis_result是字典类型
+                if isinstance(analysis_result, dict):
+                    # 处理节和知识点
+                    if "chapters" in analysis_result and isinstance(analysis_result["chapters"], list) and analysis_result["chapters"]:
+                        # 假设第一个章节匹配当前章节
+                        llm_chapter = analysis_result["chapters"][0]
+                        
+                        if isinstance(llm_chapter, dict) and "sections" in llm_chapter and isinstance(llm_chapter["sections"], list):
+                            for section_data in llm_chapter["sections"]:
+                                # 生成节ID
+                                section_id = str(uuid.uuid4())
+                                
+                                # 确保section_data是字典类型
+                                section = SectionInfo(
+                                    id=section_id,
+                                    title=section_data if isinstance(section_data, str) else section_data.get("title", "无标题节"),
+                                    start_page=chapter.start_page,  # 后续可优化为更精确的页码
+                                    end_page=chapter.end_page,
+                                    page_count=1,
+                                    knowledge_points=[]
+                                )
+                                
+                                # 处理知识点
+                                if isinstance(section_data, dict) and "knowledge_points" in section_data and isinstance(section_data["knowledge_points"], list):
+                                    for kp_data in section_data["knowledge_points"]:
+                                        # 生成知识点ID
+                                        kp_id = str(uuid.uuid4())
+                                        
+                                        # 创建知识点对象
+                                        knowledge_point = KnowledgePoint(
+                                            id=kp_id,
+                                            title=kp_data if isinstance(kp_data, str) else kp_data.get("title", "无标题知识点"),
+                                            content=kp_data if isinstance(kp_data, str) else kp_data.get("content", ""),
+                                            start_page=chapter.start_page,  # 后续可优化为更精确的页码
+                                            end_page=chapter.end_page,
+                                            page_count=1,
+                                            related_points=[]
+                                        )
+                                        section.knowledge_points.append(knowledge_point)
+                                
+                                enhanced_chapter.sections.append(section)
+                
+                enhanced_chapters.append(enhanced_chapter)
+            
+            logger.info(f"大模型增强分析完成")
+            return enhanced_chapters
+            
+        except Exception as e:
+            logger.error(f"大模型增强分析失败: {str(e)}")
+            return chapters
+    
+    def _extract_text_from_pages(self, doc: fitz.Document, start_page: int, end_page: int) -> str:
+        """
+        从指定页面范围提取文本
+        
+        Args:
+            doc: PDF文档对象
+            start_page: 起始页码（从1开始）
+            end_page: 结束页码
+            
+        Returns:
+            提取的文本
+        """
+        text = ""
+        
+        # 确保页码在有效范围内
+        start_idx = max(0, start_page - 1)
+        end_idx = min(len(doc) - 1, end_page - 1)
+        
+        for page_num in range(start_idx, end_idx + 1):
+            page = doc[page_num]
+            text += page.get_text() + "\n"
+        
+        return text
     
     def _get_pdf_metadata(self, doc: fitz.Document, file_path: str, file_id: str) -> PDFMetadata:
         """获取PDF基本信息"""

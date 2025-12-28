@@ -30,3 +30,8 @@ flake8==6.1.0
 
 # 类型检查
 mypy==1.7.1
+
+# 数据库支持
+neo4j-driver==5.13.0
+# 移除SQLAlchemy依赖，改用Neo4j
+# sqlalchemy==2.0.23

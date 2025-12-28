@@ -16,7 +16,7 @@ services:
       - pdf-splitter-network
     restart: unless-stopped
 
-  # Go后端API服务
+  # Python FastAPI后端服务
   backend:
     build:
       context: ./backend
@@ -29,47 +29,10 @@ services:
       - UPLOAD_DIR=/app/uploads
       - TEMP_DIR=/app/temp
       - MAX_FILE_SIZE=52428800
-      - AI_SERVICE_URL=http://ai-service:8000
     volumes:
       - ./uploads:/app/uploads
       - ./temp:/app/temp
-    depends_on:
-      - ai-service
-      - pdf-processor
-    networks:
-      - pdf-splitter-network
-    restart: unless-stopped
-
-  # Python AI服务
-  ai-service:
-    build:
-      context: ./ai-service
-      dockerfile: Dockerfile
-    ports:
-      - "8000:8000"
-    environment:
-      - HOST=0.0.0.0
-      - PORT=8000
-      - DEBUG=False
-      - MAX_FILE_SIZE=52428800
-      - TEMP_DIR=/app/temp
-    volumes:
-      - ./ai-temp:/app/temp
-      - ./ai-logs:/app/logs
-    networks:
-      - pdf-splitter-network
-    restart: unless-stopped
-
-  # Rust PDF处理引擎
-  pdf-processor:
-    build:
-      context: ./pdf-processor
-      dockerfile: Dockerfile
-    environment:
-      - RUST_LOG=info
-    volumes:
-      - ./uploads:/app/uploads
-      - ./temp:/app/temp
+      - ./backend/logs:/app/logs
     networks:
       - pdf-splitter-network
     restart: unless-stopped
@@ -82,8 +45,4 @@ volumes:
   uploads:
     driver: local
   temp:
-    driver: local
-  ai-temp:
-    driver: local
-  ai-logs:
     driver: local
